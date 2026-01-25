@@ -1,94 +1,144 @@
 #include <iostream>
 #include <stdint.h>
-#include <cassert>
+#include "types.h"
 
-struct AllocationHeader {
-    size_t block_size; // size requested by user
-    uint8_t padding;
-};
+const size_t MIN_SPLIT_SIZE = sizeof(Node) + 1;
 
-// padding - header - user memory
-
-class LinearAllocator {
-
+class FreeListAllocator {
 private:
-    uint8_t* memory; // pointer to the start of our memory block
-
-    size_t capacity; // total size
-    size_t offset; // current position
+    uint8_t* memory;
+    size_t capacity;
+    Node* free_list;
 
 public:
-    LinearAllocator(uint8_t* ptr, size_t size) 
-    : memory(ptr), capacity(size), offset(0) {
+
+    FreeListAllocator(uint8_t* ptr, size_t size)
+        : memory(ptr), capacity(size) {
+            free_list = (Node*)memory;
+            free_list->block_size = capacity - sizeof(Node);
+            free_list->next = nullptr;
     }
 
     void* alloc(size_t size, size_t alignment) {
+        
+        Node* prev = nullptr;
+        Node* curr = free_list;
 
-        assert((alignment != 0) && ((alignment & (alignment - 1)) == 0) && "alignment must be a power of 2");
+        while (curr != nullptr) {
+            if(curr->block_size >= size + sizeof(AllocationHeader)) {
+                break;
+            }
+            prev = curr;
+            curr = curr->next;
+        }
+        
+        if (curr == nullptr) return nullptr;
 
-        void* current_address = memory + offset + sizeof(AllocationHeader);
+        size_t total_available = sizeof(Node) + curr->block_size;
+        size_t required_size = sizeof(AllocationHeader) + size;
+        size_t leftover = total_available - required_size;
 
-        uintptr_t addr = (uintptr_t)current_address;
-        uintptr_t aligned_addr = (addr + alignment - 1) & ~(alignment - 1); // gets the aligned address
+        // can we create a new node with the leftover?
+        if (leftover >= MIN_SPLIT_SIZE) {
 
-        uintptr_t padding = aligned_addr - addr; // padding
+            // split the block
 
-        if (offset + sizeof(AllocationHeader) + padding + size > capacity) return nullptr;
+            Node* curr_next = curr->next; // save curr->next before overriding. //segfault happened here because it gets overriden!!!
 
-        offset += sizeof(AllocationHeader) + padding + size;
+            uint8_t* allocation_start = (uint8_t*) curr;
 
-        AllocationHeader* header = (AllocationHeader*) (aligned_addr - sizeof(AllocationHeader));
-        header->block_size = size;
-        header->padding = padding; //adjustment
+            AllocationHeader* header = (AllocationHeader*) allocation_start;
+            header->block_size = size;
 
-        return (void*)aligned_addr;
+            uint8_t* new_node_addr = allocation_start + required_size;
+
+            Node* new_node = (Node*) new_node_addr;
+            new_node->block_size = leftover - sizeof(Node);
+            new_node->next = curr_next;
+
+            // remove current node from list and insert new_node
+            if (prev == nullptr) {
+                free_list = new_node;
+            } else {
+                prev->next = new_node;
+            }
+
+            return (void*) (allocation_start + sizeof(AllocationHeader));
+
+        } else { // not enough space, use entire block
+
+            AllocationHeader* header = (AllocationHeader*) curr;
+            header->block_size = size;
+
+            // remove this node from free_list
+            if (prev == nullptr) {
+                free_list = curr->next;
+            } else {
+                prev->next = curr->next;
+            }
+
+            return (void*)((uint8_t*)curr + sizeof(AllocationHeader));
+
+        }
 
     }
 
     void free(void* ptr) {
         AllocationHeader* header = (AllocationHeader*)((uint8_t*)ptr - sizeof(AllocationHeader));
-        std::cout << "block_size is " << header->block_size << std::endl;
-        std::cout << "padding is " << +header->padding << std::endl;
+        size_t total_size = header->block_size;
+
+        Node* node = (Node*) header;
+        
+
+        node->next = free_list;
+        free_list = node;
+
+        node->block_size = total_size + sizeof(AllocationHeader) - sizeof(Node);
+
     }
 
-    void reset() {
-        offset = 0;
-    }
+    void print_free_list() {
+        std::cout << "free list: " << std::endl;
+        
+        Node* curr = free_list;
+        int count = 0;
+        while (curr != nullptr) {
+            std::cout << "block: " << count++ << " , size = " << curr->block_size << " at " << (void*)curr << std::endl;
+            curr = curr->next;
+        }
+        if (count == 0) std::cout << "empty!" << std::endl;
 
-    size_t get_used() const {
-        return offset;
     }
-
-    size_t get_available() const {
-        return capacity - offset;
-    }
-
 };
+
 
 int main() {
 
     uint8_t buffer[1024];
-    LinearAllocator allocator(buffer, sizeof(buffer));
+    FreeListAllocator allocator(buffer, sizeof(buffer));
 
-    std::cout << "avaliable memoery : " << allocator.get_available() << std::endl;
+    std::cout << "initial state " << std::endl;
 
-    char* c = static_cast<char*>(allocator.alloc(sizeof(char), 4));
-    if (c != nullptr) {
-        *c = 'X';
-        std::cout << " allocated at: " << static_cast<void*>(c) << std::endl;
-        std::cout << " value stored: " << *c << std::endl;
-        std::cout << " memory used: " << allocator.get_used() << " bytes" << std::endl;
-        allocator.free(c);
-    }
+    allocator.print_free_list();
 
-    int* num1 = static_cast<int*>(allocator.alloc(sizeof(int), 4));
-    if (num1 != nullptr) {
-        *num1 = 42;
-        std::cout << " allocated at: " << static_cast<void*>(num1) << std::endl;
-        std::cout << " value stored: " << *num1 << std::endl;
-        std::cout << " memory used: " << allocator.get_used() << " bytes" << std::endl;
-        allocator.free(num1);
-    }
+    std::cout << "allocating 100 bytes" << std::endl;
+    void* ptr1 = allocator.alloc(100, 8);
+    std::cout << "allocated at: " << ptr1 << std::endl;
+    allocator.print_free_list();
+
+    std::cout << "allocating 200 bytes" << std::endl;
+    void* ptr2 = allocator.alloc(200, 8);
+    std::cout << "allocated at: " << ptr2 << std::endl;
+    allocator.print_free_list();
+
+    std::cout << "freeing first alloc" << std::endl;
+    allocator.free(ptr1);
+    allocator.print_free_list();
+
+    std::cout << "allocating 50 bytes" << std::endl;
+    void* ptr3 = allocator.alloc(50, 8);
+    std::cout << "allocated at: " << ptr3 << std::endl;
+    allocator.print_free_list();
 
     return 0;
 }
