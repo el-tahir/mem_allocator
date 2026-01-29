@@ -1,5 +1,8 @@
+#include <alloca.h>
+#include <cstdint>
 #include <iostream>
 #include <stdint.h>
+#include <sys/types.h>
 #include "types.h"
 
 const size_t MIN_SPLIT_SIZE = sizeof(Node) + 1;
@@ -20,7 +23,7 @@ public:
     }
 
     void* alloc(size_t size, size_t alignment) {
-        
+
         Node* prev = nullptr;
         Node* curr = free_list;
 
@@ -31,7 +34,7 @@ public:
             prev = curr;
             curr = curr->next;
         }
-        
+
         if (curr == nullptr) return nullptr;
 
         size_t total_available = sizeof(Node) + curr->block_size;
@@ -49,6 +52,7 @@ public:
 
             AllocationHeader* header = (AllocationHeader*) allocation_start;
             header->block_size = size;
+            header->padding = 0; // we assume perfect padding (for now)
 
             uint8_t* new_node_addr = allocation_start + required_size;
 
@@ -85,21 +89,46 @@ public:
 
     void free(void* ptr) {
         AllocationHeader* header = (AllocationHeader*)((uint8_t*)ptr - sizeof(AllocationHeader));
-        size_t total_size = header->block_size;
 
         Node* node = (Node*) header;
-        
+        node->block_size = header->block_size;
 
-        node->next = free_list;
-        free_list = node;
+        Node* prev = nullptr;
+        Node* curr = free_list;
 
-        node->block_size = total_size + sizeof(AllocationHeader) - sizeof(Node);
+        // find position such that prev < node < curr
+        while ( curr != nullptr && (uint8_t*) curr < (uint8_t*) node) { // need to convert to uint8_t* for pointer arithmetic
+            prev = curr;
+            curr = curr->next;
+        }
+
+        if (prev == nullptr) {
+            node->next = free_list;
+            free_list = node;
+        }
+        else {
+            prev->next = node;
+            node->next = curr;
+        }
+
+
+        // join next
+        if (node->next != nullptr && ((uint8_t*) node + sizeof(Node) + node->block_size == (uint8_t*) node->next)) {
+            node->block_size += sizeof(Node) + node->next->block_size;
+            node->next = node->next->next;
+        }
+
+        // join prev
+        if (prev != nullptr && (uint8_t*)prev + sizeof(Node) + prev->block_size == (uint8_t*) node) {
+            prev->block_size += sizeof(Node) + node->block_size;
+            prev->next = node->next;
+        }
 
     }
 
     void print_free_list() {
         std::cout << "free list: " << std::endl;
-        
+
         Node* curr = free_list;
         int count = 0;
         while (curr != nullptr) {
@@ -113,7 +142,6 @@ public:
 
 
 int main() {
-
     uint8_t buffer[1024];
     FreeListAllocator allocator(buffer, sizeof(buffer));
 
@@ -122,22 +150,35 @@ int main() {
     allocator.print_free_list();
 
     std::cout << "allocating 100 bytes" << std::endl;
-    void* ptr1 = allocator.alloc(100, 8);
-    std::cout << "allocated at: " << ptr1 << std::endl;
+    void* A = allocator.alloc(100, 8);
+    std::cout << "allocated at: " << A << std::endl;
     allocator.print_free_list();
 
-    std::cout << "allocating 200 bytes" << std::endl;
-    void* ptr2 = allocator.alloc(200, 8);
-    std::cout << "allocated at: " << ptr2 << std::endl;
+    std::cout << "allocating 100 bytes" << std::endl;
+    void* B = allocator.alloc(100, 8);
+    std::cout << "allocated at: " << B << std::endl;
     allocator.print_free_list();
 
-    std::cout << "freeing first alloc" << std::endl;
-    allocator.free(ptr1);
+    std::cout << "allocating 100 bytes" << std::endl;
+    void* C = allocator.alloc(100, 8);
+    std::cout << "allocated at: " << C << std::endl;
     allocator.print_free_list();
 
-    std::cout << "allocating 50 bytes" << std::endl;
-    void* ptr3 = allocator.alloc(50, 8);
-    std::cout << "allocated at: " << ptr3 << std::endl;
+    std::cout << "allocating 100 bytes" << std::endl;
+    void* D = allocator.alloc(100, 8);
+    std::cout << "allocated at: " << D << std::endl;
+    allocator.print_free_list();
+
+    std::cout << "freeing B" << std::endl;
+    allocator.free(B);
+    allocator.print_free_list();
+
+    std::cout << "freeing C" << std::endl;
+    allocator.free(C);
+    allocator.print_free_list();
+
+    std::cout << "freeing A" << std::endl;
+    allocator.free(A);
     allocator.print_free_list();
 
     return 0;
