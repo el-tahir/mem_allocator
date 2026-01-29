@@ -5,7 +5,10 @@
 #include <sys/types.h>
 #include "types.h"
 
+
+const size_t MIN_ALLOC_SIZE = sizeof(Node);
 const size_t MIN_SPLIT_SIZE = sizeof(Node) + 1;
+const size_t MIN_ALIGNMENT = alignof(Node);
 
 class FreeListAllocator {
 private:
@@ -23,6 +26,9 @@ public:
     }
 
     void* alloc(size_t size, size_t alignment) {
+
+        size = std::max(size, MIN_ALLOC_SIZE); // enforce size
+        alignment = std::max(alignment, MIN_ALIGNMENT); // enforce alignment
 
         Node* prev = nullptr;
         Node* curr = free_list;
@@ -91,7 +97,8 @@ public:
         AllocationHeader* header = (AllocationHeader*)((uint8_t*)ptr - sizeof(AllocationHeader));
 
         Node* node = (Node*) header;
-        node->block_size = header->block_size;
+        size_t physical_size = header->block_size + header->padding + sizeof(AllocationHeader);
+        node->block_size = physical_size - sizeof(Node);
 
         Node* prev = nullptr;
         Node* curr = free_list;
@@ -137,47 +144,20 @@ public:
         }
         if (count == 0) std::cout << "empty!" << std::endl;
 
+        std::cout << "-------------------------------------" << std::endl;
+
     }
 };
 
 
 int main() {
+
     uint8_t buffer[1024];
-    FreeListAllocator allocator(buffer, sizeof(buffer));
 
-    std::cout << "initial state " << std::endl;
-
+    FreeListAllocator allocator = FreeListAllocator(buffer, sizeof(buffer));
     allocator.print_free_list();
-
-    std::cout << "allocating 100 bytes" << std::endl;
-    void* A = allocator.alloc(100, 8);
-    std::cout << "allocated at: " << A << std::endl;
+    void* A = allocator.alloc(1, 1);
     allocator.print_free_list();
-
-    std::cout << "allocating 100 bytes" << std::endl;
-    void* B = allocator.alloc(100, 8);
-    std::cout << "allocated at: " << B << std::endl;
-    allocator.print_free_list();
-
-    std::cout << "allocating 100 bytes" << std::endl;
-    void* C = allocator.alloc(100, 8);
-    std::cout << "allocated at: " << C << std::endl;
-    allocator.print_free_list();
-
-    std::cout << "allocating 100 bytes" << std::endl;
-    void* D = allocator.alloc(100, 8);
-    std::cout << "allocated at: " << D << std::endl;
-    allocator.print_free_list();
-
-    std::cout << "freeing B" << std::endl;
-    allocator.free(B);
-    allocator.print_free_list();
-
-    std::cout << "freeing C" << std::endl;
-    allocator.free(C);
-    allocator.print_free_list();
-
-    std::cout << "freeing A" << std::endl;
     allocator.free(A);
     allocator.print_free_list();
 
