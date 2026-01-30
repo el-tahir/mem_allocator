@@ -1,6 +1,9 @@
 #include <alloca.h>
 #include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <iostream>
+#include <memory>
 #include <stdint.h>
 #include <sys/types.h>
 #include "types.h"
@@ -147,6 +150,53 @@ public:
         std::cout << "-------------------------------------" << std::endl;
 
     }
+
+    void* realloc(void* ptr, size_t new_size) {
+
+        if (ptr == nullptr) return alloc(new_size, MIN_ALIGNMENT); // what alignment should i use here?
+        if (new_size == 0) {
+            free(ptr);
+            return nullptr;
+        }
+
+        AllocationHeader* header = (AllocationHeader*) ((uint8_t*) ptr - sizeof(AllocationHeader));
+        size_t old_size = header->block_size;
+
+        // shrink, free the extra space
+        if (new_size < old_size && old_size - new_size >= MIN_SPLIT_SIZE) {
+
+            // ill try to convert the remaining block
+            // as if its an allocated block and then send it to free
+
+            AllocationHeader* extra_memory_header = (AllocationHeader*)((uint8_t*) ptr + new_size);
+            size_t total_extra_memory = old_size - new_size;
+            size_t usable_memory = total_extra_memory - sizeof(AllocationHeader);
+
+            extra_memory_header->block_size = usable_memory;
+            extra_memory_header->padding = 0;
+            void* extra_memory = (void*)((uint8_t*) extra_memory_header + sizeof(AllocationHeader));
+
+            free(extra_memory);
+
+            header->block_size = new_size;
+
+            return ptr; // return the original memory, now with shrinked size
+
+            // grow, allocate a new block, copy the data, and free the old one
+        } else if (new_size > old_size) {
+
+            void* new_ptr = alloc(new_size, MIN_ALIGNMENT);
+            if (new_ptr == nullptr) return nullptr; //failed allocation
+            std::memcpy(new_ptr, ptr, std::min(new_size, old_size));
+            free(ptr);
+
+            return new_ptr;
+        }
+
+        return ptr;
+
+    }
+
 };
 
 
@@ -156,9 +206,26 @@ int main() {
 
     FreeListAllocator allocator = FreeListAllocator(buffer, sizeof(buffer));
     allocator.print_free_list();
-    void* A = allocator.alloc(1, 1);
+
+    std::cout << "allocate 100 bytes and fill with 'A'" << std::endl;
+    char* ptr = (char*)allocator.alloc(100, 1);
+    std::memset(ptr, 'A', 100);
+    std::cout << "realloc to size 200" << std::endl;
+    ptr = (char*)allocator.realloc(ptr, 200);
+    std::cout << "first 10 bytes after resizing to 200" << std::endl;
+    for (int i = 0; i < 10; i++) {
+        std::cout << ptr[i] << ", ";
+    }
+    std::cout << std::endl;
     allocator.print_free_list();
-    allocator.free(A);
+
+    std::cout << "realloc to size 50" << std::endl;
+    ptr = (char*)allocator.realloc(ptr, 50);
+    std::cout << "first 10 bytes after resizig to 50" << std::endl;
+    for (int i = 0; i < 10; i++) {
+        std::cout << ptr[i] << ", ";
+    }
+    std::cout << std::endl;
     allocator.print_free_list();
 
     return 0;
