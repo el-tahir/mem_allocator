@@ -1,5 +1,4 @@
-#ifndef LINEAR_ALLOCATOR_H
-#define LINEAR_ALLOCATOR_H
+#pragma once
 
 #include <stdint.h>
 
@@ -27,5 +26,3 @@ public:
     size_t get_available() const;
 
 };
-
-#endif
