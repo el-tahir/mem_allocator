@@ -1,12 +1,30 @@
 #include "FreeListAllocator.h"
 #include "types.h"
+#include <cstdint>
+#include <sys/types.h>
 
 
 FreeListAllocator::FreeListAllocator(uint8_t* ptr, size_t size)
     : memory(ptr), capacity(size) {
-        free_list = (Node*)memory;
-        free_list->block_size = capacity - sizeof(Node);
+
+        // ensure the initial memory is aligned to allow Node storage
+        uintptr_t current_addr = (uintptr_t) ptr;
+
+        // round up the to next alignment of Node
+        uintptr_t aligned_addr = (current_addr + alignof(Node) - 1) & ~(alignof(Node) - 1);
+
+        size_t adjustment = aligned_addr - current_addr;
+
+        if (capacity < adjustment + sizeof(Node)) {
+            free_list = nullptr;
+            capacity = 0;
+            return; // memory too small to hold even one node
+        }
+
+        free_list = (Node*) aligned_addr;
+        free_list->block_size = capacity - adjustment - sizeof(Node);
         free_list->next = nullptr;
+
 }
 
 void* FreeListAllocator::alloc(size_t size, size_t alignment) {
@@ -18,74 +36,89 @@ void* FreeListAllocator::alloc(size_t size, size_t alignment) {
     Node* curr = free_list;
 
     while (curr != nullptr) { // find first block that is large enough
-        if(curr->block_size >= size + sizeof(AllocationHeader)) {
-            break;
+
+        // calculate alignment padding (front)
+        // we want the payload (after header) to be aligned
+
+        uintptr_t current_addr = (uintptr_t) curr;
+        uintptr_t raw_payload_addr = current_addr + sizeof(AllocationHeader); // where payload would naturally start
+
+        size_t alignment_padding = 0;
+        size_t misalign = raw_payload_addr & (alignment - 1);
+        // this is equivalent to % modulo (only when alignment is a power of 2)
+        // but better because bitwise AND is faster
+        if (misalign != 0) {
+            alignment_padding = alignment - misalign;
         }
+
+        // calcuate required size and alignment slack (back)
+        // total used memory must be a multiple of alignof(Node)
+        // so that the *next* block starts on a valid address
+        size_t required_size = sizeof(AllocationHeader) + alignment_padding + size;
+        size_t alignment_slack = 0;
+        size_t remainder = required_size % alignof(Node);
+        if (remainder != 0) {
+            alignment_slack = alignof(Node) - remainder;
+            required_size += alignment_slack;
+        }
+
+        size_t total_available = curr->block_size + sizeof(Node);
+
+        if (total_available >= required_size) {
+
+            Node* next_free_node = curr->next;
+            size_t leftover = total_available - required_size;
+
+            if (leftover >= MIN_SPLIT_SIZE) {
+                // split
+                uintptr_t new_node_addr = current_addr + required_size;
+                Node* new_node = (Node*) new_node_addr;
+                new_node->block_size = leftover - sizeof(Node);
+                new_node->next = next_free_node;
+                next_free_node = new_node;
+
+            } else {
+                // no split, consume the extra leftover as slack
+                alignment_slack += leftover;
+                required_size += leftover;
+            }
+
+            // setup allocation header
+            // header sits just before the aligned payload
+            uintptr_t aligned_payload_addr = raw_payload_addr + alignment_padding;
+            uintptr_t header_addr = aligned_payload_addr - sizeof(AllocationHeader);
+
+            AllocationHeader* header = (AllocationHeader*) header_addr;
+
+            // "padding" stores only the front offset (to rewind ptr in free)
+            // "block size" stores requested size + back slack (to bridge gap in free)
+            header->padding = alignment_padding;
+            header->block_size = size + alignment_slack;
+
+            // update free list
+            if (prev == nullptr) {
+                free_list = next_free_node;
+            } else {
+                prev->next = next_free_node;
+            }
+
+            return (void*)aligned_payload_addr;
+
+        }
+
         prev = curr;
         curr = curr->next;
     }
 
-    if (curr == nullptr) return nullptr;
-
-    size_t total_available = sizeof(Node) + curr->block_size;
-    size_t required_size = sizeof(AllocationHeader) + size;
-    size_t leftover = total_available - required_size;
-
-    // can we create a new node with the leftover?
-    if (leftover >= MIN_SPLIT_SIZE) {
-
-        // split the block
-
-        Node* curr_next = curr->next; // save curr->next before overriding. //segfault happened here because it gets overriden!!!
-
-        uint8_t* allocation_start = (uint8_t*) curr;
-
-        AllocationHeader* header = (AllocationHeader*) allocation_start;
-
-        header->block_size = size;
-        header->padding = 0; // we assume perfect padding (for now)
-
-        uint8_t* new_node_addr = allocation_start + required_size;
-
-        Node* new_node = (Node*) new_node_addr;
-        new_node->block_size = leftover - sizeof(Node);
-        new_node->next = curr_next;
-
-        // remove current node from list and insert new_node
-        if (prev == nullptr) {
-            free_list = new_node;
-        } else {
-            prev->next = new_node;
-        }
-
-        return (void*) (allocation_start + sizeof(AllocationHeader));
-
-    } else { // not enough space, use entire block
-
-        Node* curr_next = curr->next;// same segfault happened here
-
-        AllocationHeader* header = (AllocationHeader*) curr;
-
-        header->block_size = size;
-        header->padding = total_available - sizeof(AllocationHeader) - size; // extra memory is padding
-
-        // remove this node from free_list
-        if (prev == nullptr) {
-            free_list = curr_next;
-        } else {
-            prev->next = curr_next;
-        }
-
-        return (void*)((uint8_t*)curr + sizeof(AllocationHeader));
-
-    }
+    return nullptr;
 
 }
 
 void FreeListAllocator::free(void* ptr) {
     AllocationHeader* header = (AllocationHeader*)((uint8_t*)ptr - sizeof(AllocationHeader));
 
-    Node* node = (Node*) header;
+    Node* node = (Node*) ((uint8_t*)header - header->padding);
+
     size_t physical_size = header->block_size + header->padding + sizeof(AllocationHeader);
     node->block_size = physical_size - sizeof(Node);
 

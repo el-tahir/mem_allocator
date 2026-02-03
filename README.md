@@ -13,6 +13,6 @@ A C++ implementation of a free list and linear allocators, for educational purpo
 ```bash
 g++ main.cpp FreeListAllocator.cpp -o alloc
 ./alloc
-```
+
 
 I would appreciate any feedback!
