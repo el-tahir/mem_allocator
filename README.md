@@ -1,18 +1,38 @@
 # Custom Memory Allocators
 
-A C++ implementation of a free list and linear allocators, for educational purposes.
+Educational C++ implementations of a free-list allocator, a linear (bump) allocator, and an STL allocator adaptor.
 
-## Overview
+## What's Inside
 
-- **FreeListAllocator**: Implements immediate coalescing on free and block splitting on allocation.
-- **LinearAllocator**: Standard bump-pointer implementation for frame/scope-based allocations.
-- **Validation**: `main.cpp` contains a randomized stress test that verifies data integrity and proper block merging.
+- **FreeListAllocator**: First-fit, split-on-alloc, immediate coalescing on free. Supports `alloc`, `free`, and `realloc`.
+- **LinearAllocator**: Bump-pointer allocator for frame/scope-based usage. Use `reset()` to free all at once.
+- **STLAllocator**: Adaptor that plugs `FreeListAllocator` into standard containers.
+- **Tests**: `main.cpp` includes a randomized stress test and an STL integration test.
+
+## Files
+
+- `FreeListAllocator.h/.cpp`: Free-list allocator implementation.
+- `LinearAllocator.h/.cpp`: Linear allocator implementation.
+- `STLAllocator.h`: STL allocator adaptor.
+- `types.h`: Shared `AllocationHeader`, `Node`, and size/alignment constants.
+- `main.cpp`: Stress test + STL test.
 
 ## Build & Run
 
 ```bash
-g++ main.cpp FreeListAllocator.cpp -o alloc
-./alloc
+make
+./alloc_test
+```
 
+Or run the test target directly:
 
-I would appreciate any feedback!
+```bash
+make test
+```
+
+## Sanitizers (optional)
+
+```bash
+make test_asan
+make test_ubsan
+```
