@@ -1,10 +1,73 @@
 #include "FreeListAllocator.h"
+#include "STLAllocator.h"
 #include "types.h"
 #include <cstdint>
 #include <cstring>
 #include <vector>
 #include <ctime>
 #include <cassert>
+#include <map>
+#include <string>
+
+// type defs for stl test
+using CharAllocator = STLAllocator<char>;
+using StringAllocator = STLAllocator<std::basic_string<char, std::char_traits<char>, CharAllocator>>;
+
+using MyString = std::basic_string<char, std::char_traits<char>, CharAllocator>;
+
+using MyVec = std::vector<MyString, StringAllocator>;
+
+using MapAllocator = STLAllocator<std::pair<const MyString, MyVec>>;
+using MyMap = std::map<MyString, MyVec, std::less<MyString>, MapAllocator>;
+
+void stl_test() {
+    std::cout << "starting stl test ..." << std::endl;
+
+    const size_t BUFFER_SIZE = 1024 * 1024;
+    uint8_t* buffer = new uint8_t[BUFFER_SIZE];
+
+    {
+        FreeListAllocator allocator(buffer, BUFFER_SIZE);
+
+        STLAllocator<char> stl_alloc(allocator);
+
+        MyMap map(stl_alloc);
+
+        for (int i = 0; i < 50; i++) {
+            std::string tmp = "key_" + std::to_string(i);
+            MyString key(tmp.c_str(), stl_alloc);
+
+            MyVec vec(stl_alloc);
+            vec.push_back(MyString("value_a", stl_alloc));
+            vec.push_back(MyString("value_b", stl_alloc));
+            vec.push_back(MyString("value_c", stl_alloc));
+
+            map[key] = vec;
+        }
+
+        std::cout << "map populated with " << map.size() << " items " << std::endl;
+
+        MyString lookup_key1(std::string("key_10").c_str(), stl_alloc);
+        MyString lookup_key2(std::string("key_49").c_str(), stl_alloc);
+
+
+        assert(map[lookup_key1][1] == "value_b");
+        assert(map[lookup_key2][0] == "value_a");
+
+        std::cout << "data verification successful " << std::endl;
+
+        // stl containters destroyed here,
+        // their destructors should call deallocate(), which calls free()
+    }
+
+    delete[] buffer;
+
+    std::cout << "stl test passed!" << std::endl;
+    std::cout << "-------------------" << std::endl;
+}
+
+
+
 
 void stress_test() {
     struct Allocation {
@@ -69,6 +132,7 @@ void stress_test() {
 int main() {
 
     stress_test();
+    stl_test();
 
     return 0;
 }
