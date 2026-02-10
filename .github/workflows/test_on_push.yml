@@ -1,0 +1,17 @@
+name: test_on_push
+
+on:
+    workflow_dispatch:
+    push:
+    pull_request:
+
+jobs:
+    test:
+        name: make_test
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: checkout
+              uses: actions/checkout@v4
+            - name: run tests
+              run: make test CXX=g++
