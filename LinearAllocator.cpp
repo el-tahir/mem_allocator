@@ -2,24 +2,26 @@
 #include <cassert>
 
 
-LinearAllocator::LinearAllocator(uint8_t* ptr, size_t size) 
-: memory(ptr), capacity(size), offset(0) {
+void linear_allocator_init(LinearAllocator* allocator, uint8_t* ptr, size_t size) {
+    allocator->memory = ptr;
+    allocator->capacity = size;
+    allocator->offset = 0;
 }
 
-void* LinearAllocator::alloc(size_t size, size_t alignment) {
+void* linear_allocator_alloc(LinearAllocator* allocator, size_t size, size_t alignment) {
 
     assert((alignment != 0) && ((alignment & (alignment - 1)) == 0) && "alignment must be a power of 2");
 
-    void* current_address = memory + offset + sizeof(AllocationHeader);
+    void* current_address = allocator->memory + allocator->offset + sizeof(AllocationHeader);
 
     uintptr_t addr = (uintptr_t)current_address;
     uintptr_t aligned_addr = (addr + alignment - 1) & ~(alignment - 1); // gets the aligned address
 
     uintptr_t padding = aligned_addr - addr; // padding
 
-    if (offset + sizeof(AllocationHeader) + padding + size > capacity) return nullptr;
+    if (allocator->offset + sizeof(AllocationHeader) + padding + size > allocator->capacity) return nullptr;
 
-    offset += sizeof(AllocationHeader) + padding + size;
+    allocator->offset += sizeof(AllocationHeader) + padding + size;
 
     AllocationHeader* header = (AllocationHeader*) (aligned_addr - sizeof(AllocationHeader));
     header->block_size = size;
@@ -29,20 +31,21 @@ void* LinearAllocator::alloc(size_t size, size_t alignment) {
 
 }
 
-void LinearAllocator::free(void* ptr) {
+void linear_allocator_free(LinearAllocator* allocator, void* ptr) {
+    (void)allocator;
     AllocationHeader* header = (AllocationHeader*)((uint8_t*)ptr - sizeof(AllocationHeader));
     std::cout << "block_size is " << header->block_size << std::endl;
     std::cout << "padding is " << +header->padding << std::endl;
 }
 
-void LinearAllocator::reset() {
-    offset = 0;
+void linear_allocator_reset(LinearAllocator* allocator) {
+    allocator->offset = 0;
 }
 
-size_t LinearAllocator::get_used() const {
-    return offset;
+size_t linear_allocator_get_used(const LinearAllocator* allocator) {
+    return allocator->offset;
 }
 
-size_t LinearAllocator::get_available() const {
-    return capacity - offset;
+size_t linear_allocator_get_available(const LinearAllocator* allocator) {
+    return allocator->capacity - allocator->offset;
 }

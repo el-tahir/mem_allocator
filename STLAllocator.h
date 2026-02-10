@@ -37,7 +37,7 @@ class STLAllocator {
             if (allocator == nullptr)
                 throw std::bad_alloc();
 
-            void* ptr = allocator->alloc(n * sizeof(T), alignof(T));
+            void* ptr = free_list_allocator_alloc(allocator, n * sizeof(T), alignof(T));
 
             if (ptr == nullptr)
                 throw std::bad_alloc();
@@ -48,7 +48,7 @@ class STLAllocator {
         // deallocate
         void deallocate(T* p, size_t) noexcept {
             if (allocator)
-                allocator->free(p);
+                free_list_allocator_free(allocator, p);
         }
 
         // equallity comparators (stateless allocators are always equal, but ours is stateful)

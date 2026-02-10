@@ -14,4 +14,4 @@ jobs:
             - name: checkout
               uses: actions/checkout@v4
             - name: run tests
-              run: make test CXX=g++
+              run: make test CXX=clang++

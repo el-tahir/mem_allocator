@@ -24,7 +24,8 @@ void stl_test() {
     uint8_t* buffer = new uint8_t[BUFFER_SIZE];
 
     {
-        FreeListAllocator allocator(buffer, BUFFER_SIZE);
+        FreeListAllocator allocator;
+        free_list_allocator_init(&allocator, buffer, BUFFER_SIZE);
 
         STLAllocator<char> stl_alloc(allocator);
 
@@ -75,7 +76,8 @@ void stress_test() {
     uint8_t buffer [10 * 1024];
     std::vector<Allocation> allocations;
 
-    FreeListAllocator allocator = FreeListAllocator(buffer, sizeof(buffer));
+    FreeListAllocator allocator;
+    free_list_allocator_init(&allocator, buffer, sizeof(buffer));
 
     std::srand(std::time(0));
 
@@ -87,7 +89,7 @@ void stress_test() {
 
         if (random < 7) { //alloc
             size_t random_size = std::rand() % 100 + 1;
-            void* ptr = allocator.alloc(random_size, MIN_ALIGNMENT);
+            void* ptr = free_list_allocator_alloc(&allocator, random_size, MIN_ALIGNMENT);
             if (ptr != nullptr) {
                 std::memset(ptr, 0xAA, random_size);
                 allocations.push_back({ptr, random_size});
@@ -105,7 +107,7 @@ void stress_test() {
                 assert(bytes[i] == 0xAA && "memory corrupted!");
             }
 
-            allocator.free(alloc.ptr);
+            free_list_allocator_free(&allocator, alloc.ptr);
 
             allocations.erase(allocations.begin() + random_index);
 
@@ -116,12 +118,12 @@ void stress_test() {
     // final cleanup
     std::cout << "freeing " << allocations.size() << " reminaing allocations..." << std::endl;
     for (auto& alloc : allocations) {
-        allocator.free(alloc.ptr);
+        free_list_allocator_free(&allocator, alloc.ptr);
     }
 
     std::cout << "final state should be one block" << std::endl;
 
-    allocator.print_free_list();
+    free_list_allocator_print_free_list(&allocator);
 
 }
 

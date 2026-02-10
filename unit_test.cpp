@@ -22,42 +22,44 @@ uintptr_t align_forward(uintptr_t ptr, size_t alignment) {
 TEST(test_basic) {
     const size_t SIZE = 1024;
     uint8_t buffer[SIZE];
-    FreeListAllocator allocator(buffer, SIZE);
+    FreeListAllocator allocator;
+    free_list_allocator_init(&allocator, buffer, SIZE);
 
-    void* p1 = allocator.alloc(100, 8);
+    void* p1 = free_list_allocator_alloc(&allocator, 100, 8);
     assert(p1 != nullptr);
 
-    void* p2 = allocator.alloc(100, 8);
+    void* p2 = free_list_allocator_alloc(&allocator, 100, 8);
     assert(p2 != nullptr);
     assert(p1 != p2);
 
-    allocator.free(p1);
-    allocator.free(p2);
+    free_list_allocator_free(&allocator, p1);
+    free_list_allocator_free(&allocator, p2);
 
     // should be able to allocate the full size again (minus overhead)
 
-    void* p3 = allocator.alloc(SIZE - 100, 8);
+    void* p3 = free_list_allocator_alloc(&allocator, SIZE - 100, 8);
     assert(p3 != nullptr);
 }
 
 TEST(test_alignment) {
     const size_t SIZE = 1024;
     uint8_t buffer[SIZE];
-    FreeListAllocator allocator(buffer, SIZE);
+    FreeListAllocator allocator;
+    free_list_allocator_init(&allocator, buffer, SIZE);
 
     //standarad alignment
-    void* p1 = allocator.alloc(10, 8);
+    void* p1 = free_list_allocator_alloc(&allocator, 10, 8);
     assert((uintptr_t)p1 % 8 == 0);
 
     // large power-of-2 alignment
-    void* p2 = allocator.alloc(10, 64);
+    void* p2 = free_list_allocator_alloc(&allocator, 10, 64);
     assert((uintptr_t)p2 % 64 == 0);
 
     // check that padding doesnt overlap
     assert((uintptr_t)p2 >= (uintptr_t)p1 + 10);
 
-    allocator.free(p1);
-    allocator.free(p2);
+    free_list_allocator_free(&allocator, p1);
+    free_list_allocator_free(&allocator, p2);
 }
 
 TEST(test_coalescence) {
@@ -65,71 +67,74 @@ TEST(test_coalescence) {
     //
     const size_t SIZE = 2048;
     uint8_t buffer[SIZE];
-    FreeListAllocator allocator(buffer, SIZE);
+    FreeListAllocator allocator;
+    free_list_allocator_init(&allocator, buffer, SIZE);
 
-    void* p1 = allocator.alloc(100, 8); // uses around 120 bytes (for header)
-    void* p2 = allocator.alloc(100, 8);
-    void* p3 = allocator.alloc(100, 8);
+    void* p1 = free_list_allocator_alloc(&allocator, 100, 8); // uses around 120 bytes (for header)
+    void* p2 = free_list_allocator_alloc(&allocator, 100, 8);
+    void* p3 = free_list_allocator_alloc(&allocator, 100, 8);
 
-    void* filler = allocator.alloc(SIZE - 400, 8);
+    void* filler = free_list_allocator_alloc(&allocator, SIZE - 400, 8);
 
-    allocator.free(p2);
-    allocator.free(p1);
-    allocator.free(p3);
+    free_list_allocator_free(&allocator, p2);
+    free_list_allocator_free(&allocator, p1);
+    free_list_allocator_free(&allocator, p3);
 
-    void* huge = allocator.alloc(300, 8);
+    void* huge = free_list_allocator_alloc(&allocator, 300, 8);
     // this will only succeed if coalesceing worked
 
     assert(huge != nullptr);
 
-    allocator.free(huge);
-    allocator.free(filler);
+    free_list_allocator_free(&allocator, huge);
+    free_list_allocator_free(&allocator, filler);
 }
 
 TEST(test_realloc_growth) {
     const size_t SIZE = 1024;
     uint8_t buffer[SIZE];
 
-    FreeListAllocator allocator(buffer, SIZE);
+    FreeListAllocator allocator;
+    free_list_allocator_init(&allocator, buffer, SIZE);
 
     // alloc small
-    int* p = (int*) allocator.alloc(sizeof(int) * 10, 8);
+    int* p = (int*) free_list_allocator_alloc(&allocator, sizeof(int) * 10, 8);
     for (int i = 0; i < 10; i++) p[i] = i;
 
     // grow
-    int* new_p = (int*)allocator.realloc(p, sizeof(int) * 20);
+    int* new_p = (int*)free_list_allocator_realloc(&allocator, p, sizeof(int) * 20);
 
     for (int i = 0; i < 10; i++) assert(new_p[i] == i);
 
-    allocator.free(new_p);
+    free_list_allocator_free(&allocator, new_p);
 
 }
 
 TEST(test_realloc_shrink_alignment_safety) {
     const size_t SIZE = 1024;
     uint8_t buffer[SIZE];
-    FreeListAllocator allocator(buffer, SIZE);
+    FreeListAllocator allocator;
+    free_list_allocator_init(&allocator, buffer, SIZE);
 
     // allocate block aligned to 8
     // total size should be approx 128 + overhead
-    void* ptr = allocator.alloc(128, 8);
+    void* ptr = free_list_allocator_alloc(&allocator, 128, 8);
     assert((uintptr_t)ptr % 8 == 0);
 
     // shrink to a size that is not a multiple of 8
     // if allocator splits at 'ptr + 33', the new free block
     // will start at a misaligned address
     // the allocator will try to write a 'Node' struct to a misaligned address
-    ptr = allocator.realloc(ptr, 33);
+    ptr = free_list_allocator_realloc(&allocator, ptr, 33);
 
     //try to allocate from that split area
     // the allocation should come from that hole
-    void* split_area = allocator.alloc(8, 8);
+    void* split_area = free_list_allocator_alloc(&allocator, 8, 8);
 
     // should be aligned
     assert((uintptr_t) split_area % 8 == 0);
 
-    allocator.free(ptr);
-    allocator.free(split_area);
+    free_list_allocator_free(&allocator, ptr);
+    free_list_allocator_free(&allocator, split_area);
 
 }
 

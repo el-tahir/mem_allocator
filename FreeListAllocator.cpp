@@ -1,13 +1,16 @@
 #include "FreeListAllocator.h"
 #include "types.h"
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <iostream>
 #include <sys/types.h>
 
 
-FreeListAllocator::FreeListAllocator(uint8_t* ptr, size_t size)
-    : memory(ptr), capacity(size) {
+void free_list_allocator_init(FreeListAllocator* allocator, void* ptr, size_t size) {
+        allocator->memory = ptr;
+        allocator->capacity = size;
 
         // ensure the initial memory is aligned to allow Node storage
         uintptr_t current_addr = (uintptr_t) ptr;
@@ -17,25 +20,25 @@ FreeListAllocator::FreeListAllocator(uint8_t* ptr, size_t size)
 
         size_t adjustment = aligned_addr - current_addr;
 
-        if (capacity < adjustment + sizeof(Node)) {
-            free_list = nullptr;
-            capacity = 0;
+        if (allocator->capacity < adjustment + sizeof(Node)) {
+            allocator->free_list = nullptr;
+            allocator->capacity = 0;
             return; // memory too small to hold even one node
         }
 
-        free_list = (Node*) aligned_addr;
-        free_list->block_size = capacity - adjustment - sizeof(Node);
-        free_list->next = nullptr;
+        allocator->free_list = (Node*) aligned_addr;
+        allocator->free_list->block_size = allocator->capacity - adjustment - sizeof(Node);
+        allocator->free_list->next = nullptr;
 
 }
 
-void* FreeListAllocator::alloc(size_t size, size_t alignment) {
+void* free_list_allocator_alloc(FreeListAllocator* allocator, size_t size, size_t alignment) {
 
     size = std::max(size, MIN_ALLOC_SIZE); // enforce size
     alignment = std::max(alignment, MIN_ALIGNMENT); // enforce alignment
 
     Node* prev = nullptr;
-    Node* curr = free_list;
+    Node* curr = allocator->free_list;
 
     while (curr != nullptr) { // find first block that is large enough
 
@@ -100,7 +103,7 @@ void* FreeListAllocator::alloc(size_t size, size_t alignment) {
 
             // update free list
             if (prev == nullptr) {
-                free_list = next_free_node;
+                allocator->free_list = next_free_node;
             } else {
                 prev->next = next_free_node;
             }
@@ -117,12 +120,13 @@ void* FreeListAllocator::alloc(size_t size, size_t alignment) {
 
 }
 
-void FreeListAllocator::free(void* ptr) {
+void free_list_allocator_free(FreeListAllocator* allocator, void* ptr) {
     if (ptr == nullptr) return;
 
-    assert(memory != nullptr && "allocator memory base must be initialized");
+    assert(allocator->memory != nullptr && "allocator memory base must be initialized");
+    uint8_t* allocator_memory = (uint8_t*)allocator->memory;
     assert(
-        memory <= (uint8_t*)ptr  && (uint8_t*)ptr < (memory + capacity) &&
+        allocator_memory <= (uint8_t*)ptr  && (uint8_t*)ptr < (allocator_memory + allocator->capacity) &&
         "pointer passed to free is outside allocator range"
     );
 
@@ -134,7 +138,7 @@ void FreeListAllocator::free(void* ptr) {
     node->block_size = physical_size - sizeof(Node);
 
     Node* prev = nullptr;
-    Node* curr = free_list;
+    Node* curr = allocator->free_list;
 
     // find position such that prev < node < curr
     while ( curr != nullptr && (uint8_t*) curr < (uint8_t*) node) { // need to convert to uint8_t* for pointer arithmetic
@@ -143,8 +147,8 @@ void FreeListAllocator::free(void* ptr) {
     }
 
     if (prev == nullptr) {
-        node->next = free_list;
-        free_list = node;
+        node->next = allocator->free_list;
+        allocator->free_list = node;
     } else {
         prev->next = node;
         node->next = curr;
@@ -165,10 +169,10 @@ void FreeListAllocator::free(void* ptr) {
 
 }
 
-void FreeListAllocator::print_free_list() {
+void free_list_allocator_print_free_list(FreeListAllocator* allocator) {
     std::cout << "free list: " << std::endl;
 
-    Node* curr = free_list;
+    Node* curr = allocator->free_list;
     int count = 0;
     while (curr != nullptr) {
         std::cout << "block: " << count++ << " , size = " << curr->block_size << " at " << (void*)curr << std::endl;
@@ -180,11 +184,11 @@ void FreeListAllocator::print_free_list() {
 
 }
 
-void* FreeListAllocator::realloc(void* ptr, size_t new_size) {
+void* free_list_allocator_realloc(FreeListAllocator* allocator, void* ptr, size_t new_size) {
 
-    if (ptr == nullptr) return alloc(new_size, MIN_ALIGNMENT); // what alignment should i use here?
+    if (ptr == nullptr) return free_list_allocator_alloc(allocator, new_size, MIN_ALIGNMENT); // what alignment should i use here?
     if (new_size == 0) {
-        free(ptr);
+        free_list_allocator_free(allocator, ptr);
         return nullptr;
     }
 
@@ -225,7 +229,7 @@ void* FreeListAllocator::realloc(void* ptr, size_t new_size) {
 
         // std::cout << "is extra_memory aligned " << ((uintptr_t)extra_memory % 8 == 0) << std::endl;
         // std::cout << "extra memory is " << (uintptr_t)extra_memory << std::endl;
-        free(extra_memory);
+        free_list_allocator_free(allocator, extra_memory);
 
         header->block_size = aligned_new_size;
 
@@ -234,10 +238,10 @@ void* FreeListAllocator::realloc(void* ptr, size_t new_size) {
         // grow, allocate a new block, copy the data, and free the old one
     } else if (new_size > old_size) {
 
-        void* new_ptr = alloc(new_size, MIN_ALIGNMENT);
+        void* new_ptr = free_list_allocator_alloc(allocator, new_size, MIN_ALIGNMENT);
         if (new_ptr == nullptr) return nullptr; //failed allocation
         std::memcpy(new_ptr, ptr, std::min(aligned_new_size, old_size));
-        free(ptr);
+        free_list_allocator_free(allocator, ptr);
 
         return new_ptr;
     }

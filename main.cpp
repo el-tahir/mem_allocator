@@ -4,22 +4,31 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <new>
 
 int main() {
     constexpr size_t BUFFER_SIZE = 1024;
-    uint8_t buffer[BUFFER_SIZE];
 
-    FreeListAllocator allocator(buffer, BUFFER_SIZE);
+    void* buffer = std::malloc(BUFFER_SIZE);
 
-    void* ptr = allocator.alloc(128, MIN_ALIGNMENT);
+    if (buffer == nullptr) {
+        throw std::bad_alloc();
+    }
+
+    FreeListAllocator allocator;
+    free_list_allocator_init(&allocator, buffer, BUFFER_SIZE);
+
+    void* ptr = free_list_allocator_alloc(&allocator, 128, MIN_ALIGNMENT);
     if (ptr == nullptr) {
         std::cerr << "allocation failed" << std::endl;
         return 1;
     }
 
     std::memset(ptr, 0xAB, 128);
-    allocator.free(ptr);
+    free_list_allocator_free(&allocator, ptr);
 
     std::cout << "allocator demo completed" << std::endl;
+
+    std::free(buffer);
     return 0;
 }

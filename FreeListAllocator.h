@@ -8,23 +8,18 @@
 
 #include "types.h"
 
-class FreeListAllocator {
-private:
-    uint8_t* memory;
+struct FreeListAllocator {
+    void* memory;
     size_t capacity;
     Node* free_list;
-
-
-public:
-
-    FreeListAllocator(uint8_t* ptr, size_t size);
-
-    void* alloc(size_t size, size_t alignment);
-
-    void free(void* ptr);
-
-    void print_free_list();
-
-    void* realloc(void* ptr, size_t new_size);
-
 };
+
+void free_list_allocator_init(FreeListAllocator* allocator, void* ptr, size_t size);
+
+void* free_list_allocator_alloc(FreeListAllocator* allocator, size_t size, size_t alignment);
+
+void free_list_allocator_free(FreeListAllocator* allocator, void* ptr);
+
+void free_list_allocator_print_free_list(FreeListAllocator* allocator);
+
+void* free_list_allocator_realloc(FreeListAllocator* allocator, void* ptr, size_t new_size);
