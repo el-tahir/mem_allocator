@@ -1,1 +1,4 @@
 alloc
+*.o
+alloc_test
+unit_test

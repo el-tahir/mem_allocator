@@ -1,84 +1,61 @@
-# compiler settings
-CXX = g++
-CXXFLAGS = -std=c++17 -Wall -Wextra -g
+CXX := g++
+CXXFLAGS := -std=c++17 -Wall -Wextra -Werror -g
 
-# source files
-LIB_SRCS = FreeListAllocator.cpp LinearAllocator.cpp
-INTEGRATION_TEST_SRCS = main.cpp
-UNIT_TEST_SRCS = unit_test.cpp
-ALL_SRCS = $(LIB_SRCS) $(INTEGRATION_TEST_SRCS) $(UNIT_TEST_SRCS)
+LIB_SRCS := FreeListAllocator.cpp LinearAllocator.cpp
+LIB_OBJS := $(LIB_SRCS:.cpp=.o)
 
-# Object files
-LIB_OBJS = $(LIB_SRCS:.cpp=.o)
-INTEGRATION_TEST_OBJS = $(INTEGRATION_TEST_SRCS:.cpp=.o)
-UNIT_TEST_OBJS = $(UNIT_TEST_SRCS:.cpp=.o)
+DEMO_SRCS := main.cpp
+INTEGRATION_TEST_SRCS := integration_test.cpp
+UNIT_TEST_SRCS := unit_test.cpp
 
-# Outputs
-LIBRARY = libcustomalloc.a
-INTEGRATION_TEST_EXEC = alloc_test
-UNIT_TEST_EXEC = unit_test
+DEMO_OBJS := $(DEMO_SRCS:.cpp=.o)
+INTEGRATION_TEST_OBJS := $(INTEGRATION_TEST_SRCS:.cpp=.o)
+UNIT_TEST_OBJS := $(UNIT_TEST_SRCS:.cpp=.o)
 
-# --- MAIN TARGETS ---
+LIBRARY := libcustomalloc.a
+DEMO_EXEC := alloc_demo
+INTEGRATION_TEST_EXEC := integration_test
+UNIT_TEST_EXEC := unit_test
 
-# Default:
-all: $(INTEGRATION_TEST_EXEC) $(UNIT_TEST_EXEC)
+.PHONY: all demo lib test test-unit test-integration test-asan test-ubsan clean
 
-# Build the static library only
-lib: $(LIB_OBJS)
-	ar rcs $(LIBRARY) $(LIB_OBJS)
-	@echo "Library $(LIBRARY) created."
+all: demo test
 
-# Build and run integration tests
-test: $(INTEGRATION_TEST_EXEC)
-	./$(INTEGRATION_TEST_EXEC)
+demo: $(DEMO_EXEC)
 
-# Build and run unit tests
-unit_test: $(UNIT_TEST_EXEC)
+lib: $(LIBRARY)
+
+$(LIBRARY): $(LIB_OBJS)
+	ar rcs $@ $^
+
+test: test-unit test-integration
+
+test-unit: $(UNIT_TEST_EXEC)
 	./$(UNIT_TEST_EXEC)
 
-# Run all tests
-test_all: $(INTEGRATION_TEST_EXEC) $(UNIT_TEST_EXEC)
-	@echo "Running integration tests..."
+test-integration: $(INTEGRATION_TEST_EXEC)
 	./$(INTEGRATION_TEST_EXEC)
-	@echo ""
-	@echo "Running unit tests..."
-	./$(UNIT_TEST_EXEC)
 
-# --- COMPILATION ---
+$(DEMO_EXEC): $(DEMO_OBJS) $(LIB_OBJS)
+	$(CXX) $(CXXFLAGS) -o $@ $^
 
-# Link the integration test executable
 $(INTEGRATION_TEST_EXEC): $(INTEGRATION_TEST_OBJS) $(LIB_OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
-# Link the unit test executable
 $(UNIT_TEST_EXEC): $(UNIT_TEST_OBJS) $(LIB_OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
-# Compile source files to object files
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# --- SANITIZERS & OPTIMIZATION ---
+test-asan: CXXFLAGS += -fsanitize=address -O0
+test-asan: clean
+	$(MAKE) test
 
-# Address Sanitizer (Debug -O0)
-test_asan: CXXFLAGS += -fsanitize=address -O0
-test_asan: clean all
-	@echo "Running integration tests with Address Sanitizer (O0)..."
-	./$(INTEGRATION_TEST_EXEC)
-	@echo "Running unit tests with Address Sanitizer (O0)..."
-	./$(UNIT_TEST_EXEC)
+test-ubsan: CXXFLAGS += -fsanitize=undefined -O0
+test-ubsan: clean
+	$(MAKE) test
 
-# Undefined Behavior Sanitizer (Debug -O0)
-test_ubsan: CXXFLAGS += -fsanitize=undefined -O0
-test_ubsan: clean all
-	@echo "Running integration tests with UB Sanitizer (O0)..."
-	./$(INTEGRATION_TEST_EXEC)
-	@echo "Running unit tests with UB Sanitizer (O0)..."
-	./$(UNIT_TEST_EXEC)
-
-# --- CLEANUP ---
 clean:
-	rm -f $(LIB_OBJS) $(INTEGRATION_TEST_OBJS) $(UNIT_TEST_OBJS) \
-	      $(INTEGRATION_TEST_EXEC) $(UNIT_TEST_EXEC) $(LIBRARY)
-
-.PHONY: all lib test unit_test test_all clean test_asan test_ubsan
+	rm -f $(LIB_OBJS) $(DEMO_OBJS) $(INTEGRATION_TEST_OBJS) $(UNIT_TEST_OBJS)
+	rm -f $(LIBRARY) $(DEMO_EXEC) $(INTEGRATION_TEST_EXEC) $(UNIT_TEST_EXEC)
