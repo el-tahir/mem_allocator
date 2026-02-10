@@ -1,5 +1,6 @@
 #include "FreeListAllocator.h"
 #include "types.h"
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <sys/types.h>
@@ -117,6 +118,14 @@ void* FreeListAllocator::alloc(size_t size, size_t alignment) {
 }
 
 void FreeListAllocator::free(void* ptr) {
+    if (ptr == nullptr) return;
+
+    assert(memory != nullptr && "allocator memory base must be initialized");
+    assert(
+        memory <= (uint8_t*)ptr  && (uint8_t*)ptr < (memory + capacity) &&
+        "pointer passed to free is outside allocator range"
+    );
+
     AllocationHeader* header = (AllocationHeader*)((uint8_t*)ptr - sizeof(AllocationHeader));
     // std::cout << "header inside free() is " << (uintptr_t)header << std::endl;
     Node* node = (Node*) ((uint8_t*)header - header->padding);

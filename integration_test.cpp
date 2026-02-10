@@ -11,12 +11,9 @@
 
 // type defs for stl test
 using CharAllocator = STLAllocator<char>;
-using StringAllocator = STLAllocator<std::basic_string<char, std::char_traits<char>, CharAllocator>>;
-
 using MyString = std::basic_string<char, std::char_traits<char>, CharAllocator>;
-
+using StringAllocator = STLAllocator<MyString>;
 using MyVec = std::vector<MyString, StringAllocator>;
-
 using MapAllocator = STLAllocator<std::pair<const MyString, MyVec>>;
 using MyMap = std::map<MyString, MyVec, std::less<MyString>, MapAllocator>;
 

@@ -1,5 +1,5 @@
-CXX := g++
-CXXFLAGS := -std=c++17 -Wall -Wextra -Werror -g
+CXX := clang++
+CXXFLAGS := -std=c++17 -Wall -Wextra -Wpedantic -Werror -g
 
 LIB_SRCS := FreeListAllocator.cpp LinearAllocator.cpp
 LIB_OBJS := $(LIB_SRCS:.cpp=.o)
