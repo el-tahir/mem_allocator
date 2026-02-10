@@ -12,7 +12,7 @@ int main() {
     FreeListAllocator allocator(buffer, BUFFER_SIZE);
 
     void* ptr = allocator.alloc(128, MIN_ALIGNMENT);
-    if (!ptr) {
+    if (ptr == nullptr) {
         std::cerr << "allocation failed" << std::endl;
         return 1;
     }

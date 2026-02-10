@@ -1,5 +1,6 @@
 #include "FreeListAllocator.h"
 #include "types.h"
+#include <cstddef>
 #include <cstdint>
 #include <sys/types.h>
 
@@ -89,6 +90,7 @@ void* FreeListAllocator::alloc(size_t size, size_t alignment) {
             uintptr_t header_addr = aligned_payload_addr - sizeof(AllocationHeader);
 
             AllocationHeader* header = (AllocationHeader*) header_addr;
+            // std::cout << "alloc_header is " << (uintptr_t) header << std::endl;
 
             // "padding" stores only the front offset (to rewind ptr in free)
             // "block size" stores requested size + back slack (to bridge gap in free)
@@ -116,7 +118,7 @@ void* FreeListAllocator::alloc(size_t size, size_t alignment) {
 
 void FreeListAllocator::free(void* ptr) {
     AllocationHeader* header = (AllocationHeader*)((uint8_t*)ptr - sizeof(AllocationHeader));
-
+    // std::cout << "header inside free() is " << (uintptr_t)header << std::endl;
     Node* node = (Node*) ((uint8_t*)header - header->padding);
 
     size_t physical_size = header->block_size + header->padding + sizeof(AllocationHeader);
@@ -180,23 +182,43 @@ void* FreeListAllocator::realloc(void* ptr, size_t new_size) {
     AllocationHeader* header = (AllocationHeader*) ((uint8_t*) ptr - sizeof(AllocationHeader));
     size_t old_size = header->block_size;
 
+
+    // we need to (ptr + new_size) to be aligned
+
+    size_t required_alignment = alignof(Node);
+
+    uintptr_t split_addr = (uintptr_t) ptr + new_size;
+
+    uintptr_t aligned_split_addr = (split_addr + required_alignment - 1) & ~(required_alignment - 1);
+
+    size_t aligned_new_size = aligned_split_addr - (uintptr_t)ptr;
+
+
     // shrink, free the extra space
-    if (new_size < old_size && old_size - new_size >= MIN_SPLIT_SIZE) {
+    if (aligned_new_size < old_size && old_size - aligned_new_size >= MIN_SPLIT_SIZE) {
 
         // ill try to convert the remaining block
         // as if its an allocated block and then send it to free
 
-        AllocationHeader* extra_memory_header = (AllocationHeader*)((uint8_t*) ptr + new_size);
-        size_t total_extra_memory = old_size - new_size;
+        AllocationHeader* extra_memory_header = (AllocationHeader*)((uint8_t*) ptr + aligned_new_size);
+        // std::cout << "ptr is " << (uintptr_t)ptr << std::endl;
+        // std::cout << "[DEBUG] extra_memory_header is " << (uintptr_t)extra_memory_header << std::endl;
+        // std::cout << "is extra_memory header aligned? " << (((uintptr_t)extra_memory_header % 8) == 0) << std::endl;
+        // std::cout << "new size is " << new_size << std::endl;
+        // std::cout << " is ptr aligned" << ((uintptr_t)ptr % 8 == 0) << std::endl;
+
+        size_t total_extra_memory = old_size - aligned_new_size;
         size_t usable_memory = total_extra_memory - sizeof(AllocationHeader);
 
         extra_memory_header->block_size = usable_memory;
         extra_memory_header->padding = 0;
         void* extra_memory = (void*)((uint8_t*) extra_memory_header + sizeof(AllocationHeader));
 
+        // std::cout << "is extra_memory aligned " << ((uintptr_t)extra_memory % 8 == 0) << std::endl;
+        // std::cout << "extra memory is " << (uintptr_t)extra_memory << std::endl;
         free(extra_memory);
 
-        header->block_size = new_size;
+        header->block_size = aligned_new_size;
 
         return ptr; // return the original memory, now with shrinked size
 
@@ -205,7 +227,7 @@ void* FreeListAllocator::realloc(void* ptr, size_t new_size) {
 
         void* new_ptr = alloc(new_size, MIN_ALIGNMENT);
         if (new_ptr == nullptr) return nullptr; //failed allocation
-        std::memcpy(new_ptr, ptr, std::min(new_size, old_size));
+        std::memcpy(new_ptr, ptr, std::min(aligned_new_size, old_size));
         free(ptr);
 
         return new_ptr;

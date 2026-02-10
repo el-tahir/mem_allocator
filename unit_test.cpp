@@ -2,11 +2,8 @@
 #include <iostream>
 #include <cassert>
 #include <sys/types.h>
-#include <vector>
-#include <algorithm>
 #include <cstring>
 #include "FreeListAllocator.h"
-#include "LinearAllocator.h"
 
 // helpers
 #define TEST(name) void name()
@@ -22,7 +19,7 @@ uintptr_t align_forward(uintptr_t ptr, size_t alignment) {
 }
 
 // --- tests ---
-TEST(test_freelist_basic) {
+TEST(test_basic) {
     const size_t SIZE = 1024;
     uint8_t buffer[SIZE];
     FreeListAllocator allocator(buffer, SIZE);
@@ -43,7 +40,7 @@ TEST(test_freelist_basic) {
     assert(p3 != nullptr);
 }
 
-TEST(test_freelist_alignment) {
+TEST(test_alignment) {
     const size_t SIZE = 1024;
     uint8_t buffer[SIZE];
     FreeListAllocator allocator(buffer, SIZE);
@@ -63,7 +60,7 @@ TEST(test_freelist_alignment) {
     allocator.free(p2);
 }
 
-TEST(test_freelist_coalescence) {
+TEST(test_coalescence) {
     // tests that freeing A, B, C in various orders merges them back into one block
     //
     const size_t SIZE = 2048;
@@ -108,14 +105,43 @@ TEST(test_realloc_growth) {
 
 }
 
+TEST(test_realloc_shrink_alignment_safety) {
+    const size_t SIZE = 1024;
+    uint8_t buffer[SIZE];
+    FreeListAllocator allocator(buffer, SIZE);
+
+    // allocate block aligned to 8
+    // total size should be approx 128 + overhead
+    void* ptr = allocator.alloc(128, 8);
+    assert((uintptr_t)ptr % 8 == 0);
+
+    // shrink to a size that is not a multiple of 8
+    // if allocator splits at 'ptr + 33', the new free block
+    // will start at a misaligned address
+    // the allocator will try to write a 'Node' struct to a misaligned address
+    ptr = allocator.realloc(ptr, 33);
+
+    //try to allocate from that split area
+    // the allocation should come from that hole
+    void* split_area = allocator.alloc(8, 8);
+
+    // should be aligned
+    assert((uintptr_t) split_area % 8 == 0);
+
+    allocator.free(ptr);
+    allocator.free(split_area);
+
+}
+
 int main() {
 
     std::cout << "------unit tests-------" << std::endl;
 
-    RUN_TEST(test_freelist_basic);
-    RUN_TEST(test_freelist_alignment);
-    RUN_TEST(test_freelist_coalescence);
+    RUN_TEST(test_basic);
+    RUN_TEST(test_alignment);
+    RUN_TEST(test_coalescence);
     RUN_TEST(test_realloc_growth);
+    RUN_TEST(test_realloc_shrink_alignment_safety);
 
     return 0;
 }

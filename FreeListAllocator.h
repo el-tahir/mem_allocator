@@ -12,9 +12,10 @@ class FreeListAllocator {
 private:
     uint8_t* memory;
     size_t capacity;
-    Node* free_list;
+
 
 public:
+Node* free_list;
 
     FreeListAllocator(uint8_t* ptr, size_t size);
 

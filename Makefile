@@ -48,13 +48,11 @@ $(UNIT_TEST_EXEC): $(UNIT_TEST_OBJS) $(LIB_OBJS)
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-test-asan: CXXFLAGS += -fsanitize=address -O0
 test-asan: clean
-	$(MAKE) test
+	$(MAKE) test CXXFLAGS="$(CXXFLAGS) -fsanitize=address -O0"
 
-test-ubsan: CXXFLAGS += -fsanitize=undefined -O0
 test-ubsan: clean
-	$(MAKE) test
+	$(MAKE) test CXXFLAGS="$(CXXFLAGS) -fsanitize=undefined -O0"
 
 clean:
 	rm -f $(LIB_OBJS) $(DEMO_OBJS) $(INTEGRATION_TEST_OBJS) $(UNIT_TEST_OBJS)
