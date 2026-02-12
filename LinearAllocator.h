@@ -4,22 +4,23 @@
 
 #include "types.h"
 
-struct LinearAllocator {
-    void* memory; // pointer to the start of our memory block
-    size_t capacity; // total size
-    size_t offset; // current position
-};
+namespace Linear {
+    struct Allocator {
+        void* memory; // pointer to the start of our memory block
+        size_t capacity; // total size
+        size_t offset; // current position
+    };
+    bool init(Allocator& allocator, size_t total_size);
 
-bool linear_allocator_init(LinearAllocator* allocator, size_t total_size);
+    void* alloc(Allocator& allocator, size_t size, size_t alignment);
 
-void* linear_allocator_alloc(LinearAllocator* allocator, size_t size, size_t alignment);
+    void free(Allocator& allocator, void* ptr);
 
-void linear_allocator_free(LinearAllocator* allocator, void* ptr);
+    void destroy(Allocator& allocator);
 
-void linear_allocator_reset(LinearAllocator* allocator);
+    void reset(Allocator& allocator);
 
-size_t linear_allocator_get_used(const LinearAllocator* allocator);
+    size_t getUsed(const Allocator& allocator);
 
-size_t linear_allocator_get_available(const LinearAllocator* allocator);
-
-void linear_allocator_destroy(LinearAllocator* allocator);
+    size_t getAvailable(const Allocator& allocator);
+}
