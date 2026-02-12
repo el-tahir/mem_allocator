@@ -21,11 +21,11 @@ void stl_test() {
     std::cout << "starting stl test ..." << std::endl;
 
     const size_t BUFFER_SIZE = 1024 * 1024;
-    uint8_t* buffer = new uint8_t[BUFFER_SIZE];
+
+    FreeList::Allocator allocator;
+    FreeList::init(allocator, BUFFER_SIZE);
 
     {
-        FreeListAllocator allocator;
-        free_list_allocator_init(&allocator, buffer, BUFFER_SIZE);
 
         STLAllocator<char> stl_alloc(allocator);
 
@@ -58,7 +58,7 @@ void stl_test() {
         // their destructors should call deallocate(), which calls free()
     }
 
-    delete[] buffer;
+    FreeList::destroy(allocator);
 
     std::cout << "stl test passed!" << std::endl;
     std::cout << "-------------------" << std::endl;
@@ -73,11 +73,10 @@ void stress_test() {
         size_t size;
     };
 
-    uint8_t buffer [10 * 1024];
     std::vector<Allocation> allocations;
 
-    FreeListAllocator allocator;
-    free_list_allocator_init(&allocator, buffer, sizeof(buffer));
+    FreeList::Allocator allocator;
+    FreeList::init(allocator, 10 * 1024);
 
     std::srand(std::time(0));
 
@@ -89,7 +88,7 @@ void stress_test() {
 
         if (random < 7) { //alloc
             size_t random_size = std::rand() % 100 + 1;
-            void* ptr = free_list_allocator_alloc(&allocator, random_size, MIN_ALIGNMENT);
+            void* ptr = FreeList::alloc(allocator, random_size, MIN_ALIGNMENT);
             if (ptr != nullptr) {
                 std::memset(ptr, 0xAA, random_size);
                 allocations.push_back({ptr, random_size});
@@ -107,7 +106,7 @@ void stress_test() {
                 assert(bytes[i] == 0xAA && "memory corrupted!");
             }
 
-            free_list_allocator_free(&allocator, alloc.ptr);
+            FreeList::free(allocator, alloc.ptr);
 
             allocations.erase(allocations.begin() + random_index);
 
@@ -118,12 +117,14 @@ void stress_test() {
     // final cleanup
     std::cout << "freeing " << allocations.size() << " reminaing allocations..." << std::endl;
     for (auto& alloc : allocations) {
-        free_list_allocator_free(&allocator, alloc.ptr);
+        FreeList::free(allocator, alloc.ptr);
     }
 
     std::cout << "final state should be one block" << std::endl;
 
-    free_list_allocator_print_free_list(&allocator);
+    FreeList::printFreeList(allocator);
+
+    FreeList::destroy(allocator);
 
 }
 

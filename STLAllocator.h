@@ -18,12 +18,12 @@ class STLAllocator {
         using is_always_equal = std::false_type;
 
         // a pointer to the custom allocator
-        FreeListAllocator* allocator;
+        FreeList::Allocator* allocator;
 
         STLAllocator() : allocator(nullptr) {}
 
         // constructor
-        STLAllocator(FreeListAllocator& allocator_ref) : allocator(&allocator_ref) {}
+        STLAllocator(FreeList::Allocator& allocator_ref) : allocator(&allocator_ref) {}
 
         // copy constructor
         template <typename U>
@@ -37,7 +37,7 @@ class STLAllocator {
             if (allocator == nullptr)
                 throw std::bad_alloc();
 
-            void* ptr = free_list_allocator_alloc(allocator, n * sizeof(T), alignof(T));
+            void* ptr = FreeList::alloc(*allocator, n * sizeof(T), alignof(T));
 
             if (ptr == nullptr)
                 throw std::bad_alloc();
@@ -48,11 +48,11 @@ class STLAllocator {
         // deallocate
         void deallocate(T* p, size_t) noexcept {
             if (allocator)
-                free_list_allocator_free(allocator, p);
+                FreeList::free(*allocator, p);
         }
 
         // equallity comparators (stateless allocators are always equal, but ours is stateful)
-        // we say they are equal if they point to the same underlying FreeListAllocator instance
+        // we say they are equal if they point to the same underlying allocator instance
         template <typename U>
         bool operator==(const STLAllocator<U>& other) const {
             return allocator == other.allocator;

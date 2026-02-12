@@ -1,3 +1,4 @@
+main
 alloc
 *.o
 alloc_test

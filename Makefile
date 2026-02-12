@@ -30,6 +30,9 @@ $(LIBRARY): $(LIB_OBJS)
 
 test: test-unit test-integration
 
+test-all : test test-asan test-ubsan
+	@echo "all tests passed!"
+
 test-unit: $(UNIT_TEST_EXEC)
 	./$(UNIT_TEST_EXEC)
 

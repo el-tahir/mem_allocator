@@ -1,20 +1,24 @@
 #include "LinearAllocator.h"
 #include <cassert>
+#include <cstdint>
 
 
-void linear_allocator_init(LinearAllocator* allocator, uint8_t* ptr, size_t size) {
-    allocator->memory = ptr;
-    allocator->capacity = size;
+bool linear_allocator_init(LinearAllocator* allocator, size_t total_size) {
+    allocator->memory = std::malloc(total_size);
+    if (allocator->memory == nullptr) {
+        return false;
+    }
+    allocator->capacity = total_size;
     allocator->offset = 0;
+    return true;
 }
 
 void* linear_allocator_alloc(LinearAllocator* allocator, size_t size, size_t alignment) {
 
     assert((alignment != 0) && ((alignment & (alignment - 1)) == 0) && "alignment must be a power of 2");
 
-    void* current_address = allocator->memory + allocator->offset + sizeof(AllocationHeader);
+    uintptr_t addr = (uintptr_t)allocator->memory + allocator->offset + sizeof(AllocationHeader);
 
-    uintptr_t addr = (uintptr_t)current_address;
     uintptr_t aligned_addr = (addr + alignment - 1) & ~(alignment - 1); // gets the aligned address
 
     uintptr_t padding = aligned_addr - addr; // padding
@@ -36,6 +40,13 @@ void linear_allocator_free(LinearAllocator* allocator, void* ptr) {
     AllocationHeader* header = (AllocationHeader*)((uint8_t*)ptr - sizeof(AllocationHeader));
     std::cout << "block_size is " << header->block_size << std::endl;
     std::cout << "padding is " << +header->padding << std::endl;
+}
+
+void linear_allocator_destroy(LinearAllocator *allocator) {
+    if (allocator->memory) {
+        std::free(allocator->memory);
+        allocator->memory = nullptr;
+    }
 }
 
 void linear_allocator_reset(LinearAllocator* allocator) {

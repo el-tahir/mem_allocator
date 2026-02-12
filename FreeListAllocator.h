@@ -8,18 +8,22 @@
 
 #include "types.h"
 
-struct FreeListAllocator {
+namespace FreeList {
+struct Allocator {
     void* memory;
     size_t capacity;
     Node* free_list;
 };
 
-void free_list_allocator_init(FreeListAllocator* allocator, void* ptr, size_t size);
+bool init(Allocator& allocator, size_t total_size);
 
-void* free_list_allocator_alloc(FreeListAllocator* allocator, size_t size, size_t alignment);
+void* alloc(Allocator& allocator, size_t size, size_t alignment);
 
-void free_list_allocator_free(FreeListAllocator* allocator, void* ptr);
+void free(Allocator& allocator, void* ptr);
 
-void free_list_allocator_print_free_list(FreeListAllocator* allocator);
+void printFreeList(Allocator& allocator);
 
-void* free_list_allocator_realloc(FreeListAllocator* allocator, void* ptr, size_t new_size);
+void* realloc(Allocator& allocator, void* ptr, size_t new_size);
+
+void destroy(Allocator& allocator);
+}
